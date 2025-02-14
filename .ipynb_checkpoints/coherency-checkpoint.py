@@ -31,3 +31,21 @@ class Projection:
 
     def project(self, y): 
         return torch.matmul(y, self.M)
+
+    
+def jsd_norm(mu1, mu2, var1, var2):
+    mu_diff = mu1 - mu2
+    # print(mu_diff.abs().max(), var1.abs().max(), var2.abs().max())
+    t1 = 0.5 * (mu_diff ** 2 + (var1) ** 2) / (2 * (var2) ** 2)
+    t2 = 0.5 * (mu_diff ** 2 + (var2) ** 2) / (2 * (var1) ** 2)
+    return t1 + t2
+
+def jsd_loss(mu, logstd, hmatrix, data):
+    train_means = torch.tensor(torch.mean(data, dim=0), device=device).float()
+    train_std = torch.tensor(torch.std(data, dim=0), device=device).float()
+    
+    lhs_mu = ((hmatrix @ (mu * train_std + train_means).T).T - train_means) / (train_std)
+    lhs_var = (hmatrix @ ((torch.exp(2.0 * logstd) * (train_std ** 2)).T)).T / (train_std ** 2)
+    ans = torch.nan_to_num(jsd_norm(mu, lhs_mu, (2.0 * logstd).exp(), lhs_var))
+    # print(ans)
+    return ans.mean()

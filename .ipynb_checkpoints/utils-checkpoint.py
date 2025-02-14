@@ -1,6 +1,7 @@
 import numpy as np 
 import pandas as pd
 import torch
+import math
 
 from constants import *
 
@@ -44,7 +45,6 @@ def crps_sample(predictions, observations):
     obs_expanded = observations.unsqueeze(1).expand_as(sorted_preds)
     
     indicator = (sorted_preds <= obs_expanded).float()
-    # integral = torch.trapz(torch.square(indicator - torch.linspace(0, 1, n_forecasts, device=predictions.device)), dx=1.0/n_forecasts)
     integral = torch.trapz(torch.square(indicator - sorted_preds), dx=1.0/n_forecasts)
     
     return integral
@@ -115,12 +115,27 @@ def calculate_RMSE(actual_values, forecasted_values):
 def format_aggregation_matrix(agg_mat_df): 
     return torch.tensor(np.append(np.zeros((agg_mat_df.shape[0], agg_mat_df.shape[0] - agg_mat_df.shape[1])), agg_mat_df, axis=1), dtype=float)
 
+
+
+def load_data(dataset_name): 
+    data_file = "{}/data.csv".format(dataset_name)
+    hier_file = "{}/agg_mat.csv".format(dataset_name)
+
+    data = pd.read_csv(data_file, index_col=0)
+    agg_mat_df = pd.read_csv(hier_file, index_col=0)
+    base_agg_mat = agg_mat_df.values
+
+    maximum = np.max(data.values)
+    data = (data / maximum).values
+    
+    return data, base_agg_mat
+
 def make_data(dataset, range_, context_window): 
     # produces X_data and y_data tensors given the dataset 
     X_data = []
     y_data = []
     for i in range_:
-        X = dataset[i:i+context_window,:].T#.flatten()
+        X = dataset[i:i+context_window,:].T
         X_data.append(X)
 
         y = dataset[i+context_window:i+context_window+1,:].T.flatten()
@@ -128,11 +143,16 @@ def make_data(dataset, range_, context_window):
 
     return torch.tensor(np.array(X_data), dtype=float), torch.tensor(np.array(y_data), dtype=float)
 
-def add_noise(data, noise):
+def add_noise(data, aggregation_mat, noise, seed=0):
+    np.random.seed(seed)
     num_elements = data.shape[1]
     num_zeros = int(num_elements * noise)
-    indices = np.random.choice(np.arange(num_elements), size=num_zeros, replace=False)
-    data[:,indices] = 1e-3
+    
+    subtree_size = aggregation_mat.sum(axis=1)
+    keep = subtree_size == 1
+    
+    indices = np.random.choice(np.arange(num_elements)[keep], size=num_zeros, replace=False)
+    data[:,indices] = 1e-4
     # print(data)
     return data
     
@@ -148,3 +168,25 @@ def get_data(data, train_split, val_split, context_window):
     
     return X_train, y_train, X_val, y_val, X_test, y_test
 
+
+
+class Normal(object):
+    def __init__(self, means, logscales, **kwargs):
+        self.means = means
+        self.logscales = logscales
+
+    def log_prob(self, value):
+        log_prob = torch.pow(value - self.means, 2)
+        log_prob *= -(1 / (2.0 * self.logscales.mul(2.0).exp()))
+        log_prob -= self.logscales + 0.5 * math.log(2.0 * math.pi)
+        return log_prob
+
+    def sample(self, **kwargs):
+        eps = torch.normal(
+            float_tensor(self.means.size()).zero_(),
+            float_tensor(self.means.size()).fill_(1),
+        )
+        return self.means + self.logscales.exp() * eps
+
+    def rsample(self, **kwargs):
+        return self.sample(**kwargs)
