@@ -1,11 +1,12 @@
-
-params:
+    
+params: 
     context_window: 5
     train_split: 0.8
     val_split: 0.1
     hidden_dim: 128
 
-    n_runs: 1
+    n_runs: 10
     n_epochs: 500
+    latent_dim: 128
     hidden_size: 128
     lr: 0.001    

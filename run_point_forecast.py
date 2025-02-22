@@ -30,7 +30,7 @@ def parse_args():
 def load_config(dataset, config_file='config.yaml'):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
-    return config.get(dataset, {})
+    return config.get("params", {})
 
 def plot(results, metrics, get, model_name, color="black"):
     mean_res = get_mean(results, metrics)    
@@ -57,7 +57,6 @@ def plot_all_results():
     for get in metrics:
         plot_results(get)
     
-
 if __name__ == "__main__":
     
     
@@ -65,10 +64,16 @@ if __name__ == "__main__":
     data, base_agg_mat = utils.load_data(dataset_name)
     params = load_config(dataset_name)
     
-    base_results, metrics, base_losses = repeat_exp(BaseModel, base_agg_mat, data, params)
-    coherency_results, _, coherency_losses = repeat_exp(BaseModel, base_agg_mat, data, params, coherency_loss=True)
-    projection_results, _, projection_losses = repeat_exp(BaseModel, base_agg_mat, data, params, project=True)
-    profhit_results, _, profhit_losses = repeat_exp(BaseModel, base_agg_mat, data, params, profhit_loss=True)
+    print("Base model")
+    base_results, metrics, base_losses       = repeat_exp(BaseModel, base_agg_mat, data, params)
     
+    print("CoRE model")
+    coherency_results,  _, coherency_losses  = repeat_exp(BaseModel, base_agg_mat, data, params, coherency_loss=True)
+    
+    print("Projection model")
+    projection_results, _, projection_losses = repeat_exp(BaseModel, base_agg_mat, data, params, project=True)
+    
+    print("PROFHiT model")
+    profhit_results,    _, profhit_losses    = repeat_exp(BaseModel, base_agg_mat, data, params, profhit_loss=True)
     
     plot_all_results()

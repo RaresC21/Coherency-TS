@@ -140,8 +140,8 @@ def train(network, data_loader, X_val, y_val, params, aggregation_mat=None):
             c_loss = torch.tensor([0]).to(device)
 
         loss = mse_loss(pred, targets.float())
-        total_loss = loss * np.mean(c_losses) / np.mean(losses) + c_loss * params.get('coherency_weight', 0)
-        # total_loss = loss + c_loss * params['coherency_weight']
+        # total_loss = loss * np.mean(c_losses) / np.mean(losses) + c_loss * params.get('coherency_weight', 0)
+        total_loss = loss + c_loss * params.get('coherency_weight', 0)
                 
         total_loss.backward() 
         optimizer.step()
@@ -160,7 +160,7 @@ def train(network, data_loader, X_val, y_val, params, aggregation_mat=None):
 
 
 class Experiment(ABC): 
-    def __init__(self, aggregation_mat, params = {'lr':1e-4, 'n_epochs':400}):
+    def __init__(self, aggregation_mat, params):
         self.aggregation_mat = torch.tensor(aggregation_mat).float().to(device)
         self.full_agg = format_aggregation_matrix(aggregation_mat).float().to(device)
         self.params = params
@@ -230,13 +230,15 @@ class VAEDistribution(Experiment):
 
 
 def cv(model_class, base_agg_mat, data, params):
+    print("Hyperparameter tuning")
     best = None
     all_res = []
     best_w = None
     for w in [1e-4, 1e-3, 1e-2]:
         params['coherency_weight'] = w
         model = model_class(base_agg_mat, params)
-        res, losses = model.run(utils.add_noise(data.copy(), base_agg_mat, params['noise'], seed=0))
+        # res, losses = model.run(utils.add_noise(data.copy(), base_agg_mat, params['noise'], seed=0))
+        res, losses = model.run(data)
         
         all_res.append((w, res))
         if best is None or res["WMAPE"].mean() < best["WMAPE"].mean(): 
@@ -258,6 +260,10 @@ def repeat_exp(model_class, base_agg_mat, data, params, coherency_loss=False, pr
     params['coherency_loss'] = coherency_loss
     params['profhit_loss'] = profhit_loss
     params['project'] = project
+    
+    if coherency_loss or profhit_loss: 
+        coherency_weight = cv(model_class, base_agg_mat, data, params)
+        params["coherency_weight"] = coherency_weight
 
     results = []
     all_losses = []

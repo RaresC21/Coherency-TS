@@ -105,7 +105,7 @@ class DropForecast(nn.Module):
         input_dim = params['n_series']
         hidden_dim = params['hidden_dim']        
 
-        self.encoder_rnn = RNN(input_dim, hidden_dim, aggregate_mat, params)
+        self.encoder_rnn = RNN(aggregate_mat, params)
         self.hidden = nn.Linear(self.latent_dim, hidden_dim)
         self.last_layer = nn.Linear(self.latent_dim, input_dim)
     
@@ -129,7 +129,7 @@ class VAEForecast(nn.Module):
         input_dim = params['n_series']
         hidden_dim = params['hidden_dim']        
 
-        self.encoder_rnn = RNN(input_dim, hidden_dim, aggregate_mat, params)
+        self.encoder_rnn = RNN(aggregate_mat, params)
         self.hidden = nn.Linear(self.latent_dim, hidden_dim)
         self.last_layer = nn.Linear(self.latent_dim, input_dim)
     
