@@ -116,8 +116,79 @@ def format_aggregation_matrix(agg_mat_df):
     return torch.tensor(np.append(np.zeros((agg_mat_df.shape[0], agg_mat_df.shape[0] - agg_mat_df.shape[1])), agg_mat_df, axis=1), dtype=float)
 
 
+def load_m5(): 
+    def create_aggregated_dataframe(sales_train_evaluation):
+        # Columns to aggregate are d_1 to d_1942
+        cols_to_agg = [f'd_{i}' for i in range(1, 1942)]
+
+        # defines how we are grouping 
+        group_cols = [
+            ['state_id'],
+            ['store_id'],
+            ['cat_id'],
+            ['dept_id'],
+            ['state_id', 'cat_id'],
+            ['state_id', 'dept_id'],
+            ['store_id', 'cat_id'],
+            ['store_id', 'dept_id'],
+            ['item_id'],
+            ['item_id', 'state_id']
+        ]
+
+        # Create a copy of the original DataFrame to start aggregating into
+        aggregated_df = sales_train_evaluation.copy()
+        aggregated_df['Hierarchy Level'] = len(group_cols)  # Set NaN for original data
+
+        # Store the indices of the original rows
+        original_indices = np.arange(len(aggregated_df))
+
+        # Perform aggregation and append to the original DataFrame
+        hierarchy_level = 0
+        appended_data = []
+        for group in group_cols:
+            group_df = sales_train_evaluation.groupby(group)[cols_to_agg].sum().reset_index()
+            group_df['Hierarchy Level'] = hierarchy_level
+            appended_data.append(group_df)
+            hierarchy_level += 1
+
+        # Append all aggregated data in the order of hierarchy (lower index first)
+        aggregated_df = pd.concat([aggregated_df] + appended_data, ignore_index=True)
+
+        # Sort DataFrame by 'Hierarchy Level'
+        aggregated_df.reset_index(drop=True, inplace=True)
+
+        # Create an empty aggregation matrix
+        n_rows = len(aggregated_df)
+        agg_matrix = np.zeros((n_rows, n_rows), dtype=int)
+
+        # Mark original rows (self aggregation)
+        np.fill_diagonal(agg_matrix[:len(original_indices), :len(original_indices)], 1)
+
+        # Fill in the aggregation matrix for the appended rows
+        new_index_offset = len(original_indices)
+        for group in group_cols:
+            group_indices = sales_train_evaluation.groupby(group).apply(lambda x: x.index.tolist()).tolist()
+            for sub_indices in group_indices:
+                agg_matrix[new_index_offset, sub_indices] = 1
+                new_index_offset += 1
+
+        return aggregated_df, agg_matrix
+    
+    datafile = "m5/sales_train_evaluation.csv"
+    sales_train_evaluation = pd.read_csv(datafile)
+    agg_df, agg_matrix = create_aggregated_dataframe(sales_train_evaluation)
+    cols_to_agg = [f'd_{i}' for i in range(1, 1942)]
+    data = agg_df[cols_to_agg].T
+    maximum = np.max(data.values)
+    data_scaled = (data / maximum).values
+    
+    return data_scaled, agg_matrix
+
 
 def load_data(dataset_name): 
+    if dataset_name == "m5": 
+        return load_m5()
+    
     data_file = "{}/data.csv".format(dataset_name)
     hier_file = "{}/agg_mat.csv".format(dataset_name)
 

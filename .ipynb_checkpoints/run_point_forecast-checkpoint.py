@@ -21,8 +21,8 @@ from Experiments import *
 
 
 def parse_args():    
-    parser = argparse.ArgumentParser(description='Your script description')
-    parser.add_argument('-d', '--dataset', type=str, help='Choice of "traffic", "tourism", "labor"')
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('-d', '--dataset', type=str, help='Choice of "traffic", "tourism", "labor", "m5"')
     
     args = parser.parse_args()
     return args.dataset
@@ -58,7 +58,6 @@ def plot_all_results():
         plot_results(get)
     
 if __name__ == "__main__":
-    
     
     dataset_name = parse_args()
     data, base_agg_mat = utils.load_data(dataset_name)

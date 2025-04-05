@@ -3,7 +3,6 @@ import numpy as np
 from constants import *
 
 def coherency_loss(network, aggregation_mat): 
-    repeated_bias = network.last_layer.bias.repeat(network.last_layer.weight.shape[0], 1)
     return torch.norm(aggregation_mat @ network.last_layer.weight - network.last_layer.weight) + torch.norm(
         aggregation_mat @ network.last_layer.bias - network.last_layer.bias) 
 

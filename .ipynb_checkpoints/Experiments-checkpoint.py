@@ -12,11 +12,18 @@ import torch.optim as optim
 import tqdm
 
 
-def validation_loss(model, X_val, y_val):
+def validation_loss(model, val_loader):
     model.eval()  # Set model to evaluation mode
+    mse_total = 0
+    t = 0
     with torch.no_grad():  # Disable gradient calculations
-        pred = model(X_val, test=True)
-        return mse_loss(y_val, pred).item()
+        for X_val, y_val in val_loader: 
+            pred = model(X_val.to(device), test=True)
+            mse = mse_loss(y_val.to(device), pred).item() 
+            
+            t += pred.shape[0]
+            mse_total = (mse * pred.shape[0] + mse_total) / t
+        return mse_total
 
 def generate_samples(model, x, num_samples=1000):
     model.train() # needed to keep dropout 
@@ -106,7 +113,7 @@ class Metrics:
             crps_by_level.append(crps_scores.mean())
         return crps_by_level, "CRPS"
     
-def train(network, data_loader, X_val, y_val, params, aggregation_mat=None):
+def train(network, data_loader, val_loader, params, aggregation_mat=None):
     network.train()
     early_stopping = EarlyStopping(patience=100, verbose=False)
 
@@ -123,8 +130,8 @@ def train(network, data_loader, X_val, y_val, params, aggregation_mat=None):
         optimizer.zero_grad()
         network.train()
 
-        inputs = inputs
-        targets = targets
+        inputs = inputs.to(device)
+        targets = targets.to(device)
                 
         if params.get('coherency_loss', False):
             pred = network(inputs.float())
@@ -149,7 +156,7 @@ def train(network, data_loader, X_val, y_val, params, aggregation_mat=None):
         losses.append(loss.item())
         c_losses.append(c_loss.item())
         
-        val_loss = validation_loss(network, X_val, y_val)
+        val_loss = validation_loss(network, val_loader)
         early_stopping(val_loss, network)
   
         val_losses.append(val_loss)
@@ -173,13 +180,13 @@ class Experiment(ABC):
         
     def run(self, data):
         X_train, y_train, X_val, y_val, X_test, y_test = self.make_data(data)
-        batch_size = X_train.shape[0]
+        batch_size = 32 #X_train.shape[0]
         
-        train_dataloader = DataLoader(TensorDataset(X_train.to(device).float(), y_train.to(device).float()), batch_size=batch_size, shuffle=True)
-        val_dataloader   = DataLoader(TensorDataset(X_val.to(device).float()  , y_val.to(device).float()  ), batch_size=batch_size, shuffle=True)
-        test_dataloader  = DataLoader(TensorDataset(X_test.to(device).float() , y_test.to(device).float() ), batch_size=batch_size, shuffle=True)
+        train_dataloader = DataLoader(TensorDataset(X_train.float(), y_train.float()), batch_size=batch_size, shuffle=True)
+        val_dataloader   = DataLoader(TensorDataset(X_val.float()  , y_val.float()  ), batch_size=batch_size, shuffle=True)
+        test_dataloader  = DataLoader(TensorDataset(X_test.float() , y_test.float() ), batch_size=batch_size, shuffle=True)
 
-        losses = train(self.network, train_dataloader, X_val.to(device).float(), y_val.to(device).float(), self.params, self.full_agg)
+        losses = train(self.network, train_dataloader, val_dataloader, self.params, self.full_agg)
 
         metrics = Metrics(self.full_agg, self.distributional)
         return metrics.run_metrics(self.network, X_test.to(device).float(), y_test.to(device).float()), losses

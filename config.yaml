@@ -1,4 +1,6 @@
 
+
+
 params:
     context_window: 5
     train_split: 0.8
@@ -9,3 +11,14 @@ params:
     n_epochs: 500
     hidden_size: 128
     lr: 0.001    
+    
+# params:
+#     context_window: 5
+#     train_split: 0.8
+#     val_split: 0.1
+#     hidden_dim: 128
+
+#     n_runs: 1
+#     n_epochs: 500
+#     hidden_size: 128
+#     lr: 0.001    
