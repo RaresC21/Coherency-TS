@@ -11,6 +11,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import torch.optim as optim
 import tqdm
 
+from informer import *
 
 def validation_loss(model, val_loader):
     model.eval()  # Set model to evaluation mode
@@ -136,7 +137,7 @@ def train(network, data_loader, val_loader, params, aggregation_mat=None):
         if params.get('coherency_loss', False):
             pred = network(inputs.float())
             c_loss = coherency.coherency_loss(network, aggregation_mat)
-        elif params.get('profhit', False):
+        elif params.get('profhit_loss', False):
             pred = network(inputs.float())
             c_loss = coherency.coherency_data_loss(pred, aggregation_mat)
         elif params.get('jsd', False): 
@@ -161,7 +162,7 @@ def train(network, data_loader, val_loader, params, aggregation_mat=None):
   
         val_losses.append(val_loss)
 
-    # network.load_state_dict(torch.load('checkpoint.pt'))
+    network.load_state_dict(torch.load('checkpoint.pt'))
     return losses, c_losses, val_losses
 
 
@@ -181,6 +182,7 @@ class Experiment(ABC):
     def run(self, data):
         X_train, y_train, X_val, y_val, X_test, y_test = self.make_data(data)
         batch_size = 32 #X_train.shape[0]
+        print("BATCH SIZE:", batch_size)
         
         train_dataloader = DataLoader(TensorDataset(X_train.float(), y_train.float()), batch_size=batch_size, shuffle=True)
         val_dataloader   = DataLoader(TensorDataset(X_val.float()  , y_val.float()  ), batch_size=batch_size, shuffle=True)
@@ -189,8 +191,12 @@ class Experiment(ABC):
         losses = train(self.network, train_dataloader, val_dataloader, self.params, self.full_agg)
 
         metrics = Metrics(self.full_agg, self.distributional)
-        return metrics.run_metrics(self.network, X_test.to(device).float(), y_test.to(device).float()), losses
-        
+        test_metrics = metrics.run_metrics(self.network, X_test.to(device).float(), y_test.to(device).float())
+        val_metrics  = metrics.run_metrics(self.network, X_val.to(device).float(), y_val.to(device).float())
+        val_metrics = val_metrics.add_prefix('val_')
+        all_metrics = pd.concat([test_metrics, val_metrics], ignore_index=True)
+
+        return all_metrics, losses
         
     # @abstractmethod
     def make_data(self, data): 
@@ -203,7 +209,22 @@ class BaseModel(Experiment):
         
         network = RNN(self.aggregation_mat.to(device), self.params)
         self.network = network.to(device)
-    
+
+class CNNModel(Experiment): 
+    def __init__(self, aggregation_mat, params): 
+        super().__init__(aggregation_mat, params)
+        
+        network = CNNTimeSeriesForecaster(self.aggregation_mat.to(device), self.params)
+        self.network = network.to(device)
+
+class InformerModel(Experiment): 
+    def __init__(self, aggregation_mat, params): 
+        super().__init__(aggregation_mat, params)
+        
+        network = Informer(self.aggregation_mat.to(device), self.params)
+        self.network = network.to(device)
+
+        
 class JSDDistribution(Experiment): 
     def __init__(self, aggregation_mat, params): 
         super().__init__(aggregation_mat, params)
@@ -235,7 +256,6 @@ class VAEDistribution(Experiment):
         self.network = VAEForecast(torch.tensor(aggregation_mat).to(device).float(), params).to(device)
         self.distributional = True
 
-
 def cv(model_class, base_agg_mat, data, params):
     print("Hyperparameter tuning")
     best = None
@@ -246,6 +266,7 @@ def cv(model_class, base_agg_mat, data, params):
         model = model_class(base_agg_mat, params)
         # res, losses = model.run(utils.add_noise(data.copy(), base_agg_mat, params['noise'], seed=0))
         res, losses = model.run(data)
+        del model 
         
         all_res.append((w, res))
         if best is None or res["WMAPE"].mean() < best["WMAPE"].mean(): 
@@ -262,13 +283,13 @@ def repeat_noise_exp(model_class, base_agg_mat, data, params):
         results.append(res.values)
     return np.array(results), res.columns, losses
 
-def repeat_exp(model_class, base_agg_mat, data, params, coherency_loss=False, profhit_loss=False, project=False):
+def repeat_exp(model_class, base_agg_mat, data, params, coherency_loss=False, profhit_loss=False, project=False, cv_=True):
     params['n_series'] = data.shape[1]
     params['coherency_loss'] = coherency_loss
     params['profhit_loss'] = profhit_loss
     params['project'] = project
     
-    if coherency_loss or profhit_loss: 
+    if cv_ and (coherency_loss or profhit_loss): 
         coherency_weight = cv(model_class, base_agg_mat, data, params)
         params["coherency_weight"] = coherency_weight
 
@@ -281,6 +302,7 @@ def repeat_exp(model_class, base_agg_mat, data, params, coherency_loss=False, pr
         res, losses = model.run(data)
         results.append(res.values)
         all_losses.append(losses)
+        del model
         
     return np.array(results), res.columns, all_losses
 

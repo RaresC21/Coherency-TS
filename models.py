@@ -59,6 +59,51 @@ class RNN(nn.Module):
         return utils.aggregate(x, self.aggregate_mat)
     
 
+class CNNTimeSeriesForecaster(nn.Module):
+    def __init__(self, aggregate_mat, params):
+    # def __init__(self, input_channels, seq_length, output_steps, k_series):
+        super().__init__()
+        input_channels = params['n_series']
+        k_series = params['n_series']
+        seq_length = params['context_window']
+        output_steps = 1
+        
+        self.conv1 = nn.Conv1d(
+            in_channels=input_channels,
+            out_channels=16, 
+            kernel_size=3, 
+            padding=1  # Preserve sequence length
+        )
+        self.pool = nn.MaxPool1d(kernel_size=2)
+        self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        
+        # Calculate flattened dimension after convolutions and pooling
+        reduced_length = seq_length // 4  # Two pooling layers (div by 2 each)
+        
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(128 * reduced_length, 256)
+        self.fc2 = nn.Linear(256, output_steps * k_series)
+        self.output_steps = output_steps
+        self.k_series = k_series
+
+    def forward(self, x):
+#         # Input shape: (batch_size, seq_length, input_channels)
+#         x = x.permute(0, 2, 1)  # → (batch, channels, sequence)
+        
+        print(x)
+        x = torch.relu(self.conv1(x))
+        x = self.pool(x)
+        x = torch.relu(self.conv2(x))
+        x = self.pool(x)
+        
+        x = self.flatten(x)
+        x = torch.relu(self.fc1(x))
+        x = self.fc2(x)
+        
+        # Reshape to (batch, output_steps, k_series)
+        return x.view(-1, self.output_steps, self.k_series)
+
+    
     
 # make gaussian forecast
 class DistForecast(nn.Module):

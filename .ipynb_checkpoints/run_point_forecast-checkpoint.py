@@ -18,7 +18,9 @@ from sklearn import preprocessing
 import utils
 from models import * 
 from Experiments import *
+from informer import *
 
+from scipy import stats
 
 def parse_args():    
     parser = argparse.ArgumentParser(description='')
@@ -63,16 +65,45 @@ if __name__ == "__main__":
     data, base_agg_mat = utils.load_data(dataset_name)
     params = load_config(dataset_name)
     
+    # model_type = InformerModel
+    model_type = BaseModel
+    
     print("Base model")
-    base_results, metrics, base_losses       = repeat_exp(BaseModel, base_agg_mat, data, params)
+    base_results, metrics, base_losses       = repeat_exp(model_type, base_agg_mat, data, params)
     
     print("CoRE model")
-    coherency_results,  _, coherency_losses  = repeat_exp(BaseModel, base_agg_mat, data, params, coherency_loss=True)
+    coherency_results,  _, coherency_losses  = repeat_exp(model_type, base_agg_mat, data, params, coherency_loss=True)
     
     print("Projection model")
-    projection_results, _, projection_losses = repeat_exp(BaseModel, base_agg_mat, data, params, project=True)
+    projection_results, _, projection_losses = repeat_exp(model_type, base_agg_mat, data, params, project=True)
     
     print("PROFHiT model")
-    profhit_results,    _, profhit_losses    = repeat_exp(BaseModel, base_agg_mat, data, params, profhit_loss=True)
+    profhit_results,    _, profhit_losses    = repeat_exp(model_type, base_agg_mat, data, params, profhit_loss=True)
     
     plot_all_results()
+    
+    
+    
+    GET = 2
+    base_ = base_results[:, :, GET].mean(axis=1)
+    coherency_ = coherency_results[:, :, GET].mean(axis=1)
+    projection_ = projection_results[:, :, GET].mean(axis=1)
+    profhit_ = profhit_results[:, :, GET].mean(axis=1)
+    
+    print("Base:")
+    print(base_)
+    
+    print()
+    print("coherency:")
+    print(coherency_)
+    
+    print()
+    print("Projection")
+    print(projection_)
+    
+    print() 
+    print("PRFHIT")
+    print(profhit_)
+    
+    t_statistic, p_value = stats.ttest_rel(base_, coherency_)
+    print(p_value)
